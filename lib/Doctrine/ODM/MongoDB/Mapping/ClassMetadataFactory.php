@@ -35,6 +35,8 @@ use function ucfirst;
  * to a document database.
  *
  * @internal
+ *
+ * @template-extends ClassMetadataFactory<ClassMetadata>
  */
 final class ClassMetadataFactory extends AbstractClassMetadataFactory
 {
