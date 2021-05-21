@@ -166,7 +166,6 @@ class DocumentManager implements ObjectManager
             'mongodb://127.0.0.1',
             [],
             [
-                'typeMap' => self::CLIENT_TYPEMAP,
                 'driver' => [
                     'name' => 'doctrine-odm',
                     'version' => self::getVersion(),
@@ -174,16 +173,14 @@ class DocumentManager implements ObjectManager
             ]
         );
 
-        $this->checkTypeMap();
-
         $metadataFactoryClassName = $this->config->getClassMetadataFactoryName();
         $this->metadataFactory    = new $metadataFactoryClassName();
         $this->metadataFactory->setDocumentManager($this);
         $this->metadataFactory->setConfiguration($this->config);
 
-        $cacheDriver = $this->config->getMetadataCacheImpl();
+        $cacheDriver = $this->config->getMetadataCache();
         if ($cacheDriver) {
-            $this->metadataFactory->setCacheDriver($cacheDriver);
+            $this->metadataFactory->setCache($cacheDriver);
         }
 
         $hydratorDir           = $this->config->getHydratorDir();
@@ -202,6 +199,8 @@ class DocumentManager implements ObjectManager
         $this->proxyFactory      = new StaticProxyFactory($this);
         $this->repositoryFactory = $this->config->getRepositoryFactory();
         $this->classNameResolver = new CachingClassNameResolver(new ProxyManagerClassNameResolver($this->config));
+
+        $this->metadataFactory->setProxyClassNameResolver($this->classNameResolver);
     }
 
     /**
@@ -284,7 +283,11 @@ class DocumentManager implements ObjectManager
         return $this->schemaManager;
     }
 
-    /** Returns the class name resolver which is used to resolve real class names for proxy objects. */
+    /**
+     * Returns the class name resolver which is used to resolve real class names for proxy objects.
+     *
+     * @deprecated Fetch metadata for any class string (e.g. proxy object class) and read the class name from the metadata object
+     */
     public function getClassNameResolver(): ClassNameResolver
     {
         return $this->classNameResolver;
@@ -308,14 +311,14 @@ class DocumentManager implements ObjectManager
      */
     public function getDocumentDatabase(string $className): Database
     {
-        $className = $this->classNameResolver->getRealClass($className);
+        $metadata = $this->metadataFactory->getMetadataFor($className);
+        assert($metadata instanceof ClassMetadata);
+
+        $className = $metadata->getName();
 
         if (isset($this->documentDatabases[$className])) {
             return $this->documentDatabases[$className];
         }
-
-        $metadata = $this->metadataFactory->getMetadataFor($className);
-        assert($metadata instanceof ClassMetadata);
 
         $db                                  = $metadata->getDatabase();
         $db                                  = $db ?: $this->config->getDefaultDB();
@@ -342,8 +345,6 @@ class DocumentManager implements ObjectManager
      */
     public function getDocumentCollection(string $className): Collection
     {
-        $className = $this->classNameResolver->getRealClass($className);
-
         $metadata = $this->metadataFactory->getMetadataFor($className);
         assert($metadata instanceof ClassMetadata);
 
@@ -360,7 +361,7 @@ class DocumentManager implements ObjectManager
         if (! isset($this->documentCollections[$className])) {
             $db = $this->getDocumentDatabase($className);
 
-            $options = [];
+            $options = ['typeMap' => self::CLIENT_TYPEMAP];
             if ($metadata->readPreference !== null) {
                 $options['readPreference'] = new ReadPreference($metadata->readPreference, $metadata->readPreferenceTags);
             }
@@ -378,8 +379,6 @@ class DocumentManager implements ObjectManager
      */
     public function getDocumentBucket(string $className): Bucket
     {
-        $className = $this->classNameResolver->getRealClass($className);
-
         $metadata = $this->metadataFactory->getMetadataFor($className);
         assert($metadata instanceof ClassMetadata);
 
@@ -564,6 +563,11 @@ class DocumentManager implements ObjectManager
      * @param string $documentName The name of the Document.
      *
      * @return ObjectRepository  The repository.
+     *
+     * @template T of object
+     * @psalm-param class-string<T> $documentName
+     *
+     * @psalm-return ObjectRepository<T>
      */
     public function getRepository($documentName)
     {
@@ -657,6 +661,11 @@ class DocumentManager implements ObjectManager
      * @param mixed  $id
      * @param int    $lockMode
      * @param int    $lockVersion
+     *
+     * @template T of object
+     * @psalm-param class-string<T> $className
+     *
+     * @psalm-return T|null
      */
     public function find($className, $id, $lockMode = LockMode::NONE, $lockVersion = null): ?object
     {
@@ -855,17 +864,6 @@ class DocumentManager implements ObjectManager
         }
 
         return $this->filterCollection;
-    }
-
-    private function checkTypeMap(): void
-    {
-        $typeMap = $this->client->getTypeMap();
-
-        foreach (self::CLIENT_TYPEMAP as $part => $expectedType) {
-            if (! isset($typeMap[$part]) || $typeMap[$part] !== $expectedType) {
-                throw MongoDBException::invalidTypeMap($part, $expectedType);
-            }
-        }
     }
 
     private static function getVersion(): string

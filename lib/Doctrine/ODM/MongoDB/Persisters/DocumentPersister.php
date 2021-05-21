@@ -66,6 +66,8 @@ use function strtolower;
  * The DocumentPersister is responsible for persisting documents.
  *
  * @internal
+ *
+ * @template T of object
  */
 final class DocumentPersister
 {
@@ -78,7 +80,10 @@ final class DocumentPersister
     /** @var UnitOfWork */
     private $uow;
 
-    /** @var ClassMetadata */
+    /**
+     * @var ClassMetadata
+     * @psalm-var ClassMetadata<T>
+     */
     private $class;
 
     /** @var Collection|null */
@@ -466,6 +471,10 @@ final class DocumentPersister
      *
      * @todo Check identity map? loadById method? Try to guess whether
      *     $criteria is the id?
+     *
+     * @psalm-param T|null $document
+     *
+     * @psalm-return T|null
      */
     public function load($criteria, ?object $document = null, array $hints = [], int $lockMode = 0, ?array $sort = null): ?object
     {
@@ -615,11 +624,15 @@ final class DocumentPersister
     /**
      * Creates or fills a single document object from an query result.
      *
-     * @param array  $result   The query result.
-     * @param object $document The document object to fill, if any.
-     * @param array  $hints    Hints for document creation.
+     * @param array       $result   The query result.
+     * @param object|null $document The document object to fill, if any.
+     * @param array       $hints    Hints for document creation.
      *
      * @return object The filled and managed document object.
+     *
+     * @psalm-param T|null $document
+     *
+     * @psalm-return T
      */
     private function createDocument(array $result, ?object $document = null, array $hints = []): object
     {
