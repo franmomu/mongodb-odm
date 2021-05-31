@@ -58,7 +58,7 @@ use function trigger_deprecation;
  *    the serialized representation).
  *
  * @final
- * @template T of object
+ * @template-covariant T of object
  * @template-implements BaseClassMetadata<T>
  */
 /* final */ class ClassMetadata implements BaseClassMetadata
@@ -124,6 +124,23 @@ use function trigger_deprecation;
     public const REFERENCE_STORE_AS_DB_REF         = 'dbRef';
     public const REFERENCE_STORE_AS_DB_REF_WITH_DB = 'dbRefWithDb';
     public const REFERENCE_STORE_AS_REF            = 'ref';
+
+    /**
+     * The collection schema validationAction values
+     *
+     * @see https://docs.mongodb.com/manual/core/schema-validation/#accept-or-reject-invalid-documents
+     */
+    public const SCHEMA_VALIDATION_ACTION_ERROR = 'error';
+    public const SCHEMA_VALIDATION_ACTION_WARN  = 'warn';
+
+    /**
+     * The collection schema validationLevel values
+     *
+     * @see https://docs.mongodb.com/manual/core/schema-validation/#existing-documents
+     */
+    public const SCHEMA_VALIDATION_LEVEL_OFF      = 'off';
+    public const SCHEMA_VALIDATION_LEVEL_STRICT   = 'strict';
+    public const SCHEMA_VALIDATION_LEVEL_MODERATE = 'moderate';
 
     /* The inheritance mapping types */
     /**
@@ -270,6 +287,27 @@ use function trigger_deprecation;
      * @var array<string, array>
      */
     public $shardKey = [];
+
+    /**
+     * Allows users to specify a validation schema for the collection.
+     *
+     * @var array|object|null
+     */
+    private $validator;
+
+    /**
+     * Determines whether to error on invalid documents or just warn about the violations but allow invalid documents to be inserted.
+     *
+     * @var string
+     */
+    private $validationAction = self::SCHEMA_VALIDATION_ACTION_ERROR;
+
+    /**
+     * Determines how strictly MongoDB applies the validation rules to existing documents during an update.
+     *
+     * @var string
+     */
+    private $validationLevel = self::SCHEMA_VALIDATION_LEVEL_STRICT;
 
     /**
      * READ-ONLY: The name of the document class.
@@ -631,7 +669,7 @@ use function trigger_deprecation;
      * Since MongoDB only allows exactly one identifier field
      * this will always return an array with only one value
      *
-     * return (string|null)[]
+     * @return array<string|null>
      */
     public function getIdentifierFieldNames(): array
     {
@@ -991,6 +1029,42 @@ use function trigger_deprecation;
     public function isSharded(): bool
     {
         return $this->shardKey !== [];
+    }
+
+    /**
+     * @return array|object|null
+     */
+    public function getValidator()
+    {
+        return $this->validator;
+    }
+
+    /**
+     * @param array|object|null $validator
+     */
+    public function setValidator($validator): void
+    {
+        $this->validator = $validator;
+    }
+
+    public function getValidationAction(): string
+    {
+        return $this->validationAction;
+    }
+
+    public function setValidationAction(string $validationAction): void
+    {
+        $this->validationAction = $validationAction;
+    }
+
+    public function getValidationLevel(): string
+    {
+        return $this->validationLevel;
+    }
+
+    public function setValidationLevel(string $validationLevel): void
+    {
+        $this->validationLevel = $validationLevel;
     }
 
     /**
@@ -1835,7 +1909,7 @@ use function trigger_deprecation;
     /**
      * {@inheritDoc}
      */
-    public function isAssociationInverseSide($fieldName): bool
+    public function isAssociationInverseSide($assocName): bool
     {
         throw new BadMethodCallException(__METHOD__ . '() is not implemented yet.');
     }
@@ -1843,7 +1917,7 @@ use function trigger_deprecation;
     /**
      * {@inheritDoc}
      */
-    public function getAssociationMappedByTargetField($fieldName)
+    public function getAssociationMappedByTargetField($assocName)
     {
         throw new BadMethodCallException(__METHOD__ . '() is not implemented yet.');
     }
@@ -2159,6 +2233,12 @@ use function trigger_deprecation;
 
         if ($this->isReadOnly) {
             $serialized[] = 'isReadOnly';
+        }
+
+        if ($this->validator !== null) {
+            $serialized[] = 'validator';
+            $serialized[] = 'validationAction';
+            $serialized[] = 'validationLevel';
         }
 
         return $serialized;
